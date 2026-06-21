@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="midnight">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>XO Elite: Blitz Arena</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; transition: background-color 0.3s ease; }
+        .cell { aspect-ratio: 1; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); -webkit-tap-highlight-color: transparent; }
+        .custom-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+        
+        [data-theme="midnight"] { --bg-main: #0f172a; --bg-panel: #1e293b; --text-color: #f8fafc; --accent: #6366f1; }
+        [data-theme="cyberpunk"] { --bg-main: #0b0114; --bg-panel: #1a0826; --text-color: #00ffcc; --accent: #ff007f; }
+        [data-theme="amethyst"] { --bg-main: #1e112a; --bg-panel: #2d1b3e; --text-color: #f3e8ff; --accent: #a855f7; }
+
+        body { background-color: var(--bg-main); color: var(--text-color); }
+        .theme-panel { background-color: var(--bg-panel); }
+
+        #effects-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; }
+
+        /* Streak Fire Animation Effect */
+        .on-fire { animation: burn 0.5s ease-in-out infinite alternate; text-shadow: 0 0 8px #f59e0b, 0 0 20px #ef4444; }
+        @keyframes burn { from { transform: scale(1); } to { transform: scale(1.15); } }
+
+        /* Pop taunt alert animation */
+        .taunt-pop { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn { 0% { transform: scale(0) rotate(-10deg); opacity: 0; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+    </style>
+</head>
+<body class="font-sans flex flex-col justify-between select-none">
+
+    <div class="theme-panel border-b border-slate-800/80 p-3 flex flex-col items-center shrink-0 z-10 shadow-md">
+        <div class="w-full max-w-md flex justify-between items-center mb-1">
+            <h1 class="text-xl font-black tracking-tight flex items-center gap-2">
+                XO Blitz <span id="status-text" class="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md">Offline</span>
+            </h1>
+            
+            <div class="flex items-center gap-3">
+                <select id="theme-selector" class="bg-slate-950 border border-slate-700 text-[10px] rounded px-1.5 py-0.5 font-bold outline-none text-slate-300">
+                    <option value="midnight">🌃 Midnight</option>
+                    <option value="cyberpunk">⚡ Cyberpunk</option>
+                    <option value="amethyst">🔮 Amethyst</option>
+                </select>
+                <button id="toggle-setup-btn" class="text-xs text-indigo-400 font-bold hover:underline">Setup</button>
+            </div>
+        </div>
+
+        <div id="setup-panel" class="w-full max-w-md bg-slate-950 p-3 rounded-xl border border-slate-800 my-2 space-y-3 hidden">
+            <button id="host-btn" class="w-full bg-indigo-600 active:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs transition shadow-md">
+                Host Game Session
+            </button>
+            <div id="my-id-display" class="hidden text-center p-2 bg-slate-900 border border-dashed border-slate-700 rounded-lg text-xs font-mono text-slate-400 select-all">
+                Share: <span id="my-id" class="font-bold text-indigo-400">...</span>
+            </div>
+            <div class="flex gap-2">
+                <input id="peer-id-input" type="text" placeholder="Paste Gloria's ID" class="flex-grow px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                <button id="join-btn" class="bg-emerald-600 active:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition shadow-md">
+                    Connect
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-center bg-slate-950/60 p-2 rounded-xl w-full max-w-md border border-slate-800/40 mt-1">
+            <div id="wrapper-you">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">You <span id="streak-you" class="text-amber-500 hidden">🔥</span></p>
+                <p id="score-you" class="text-base font-black text-indigo-400">0</p>
+            </div>
+            <div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ties</p>
+                <p id="score-ties" class="text-base font-black text-slate-400">0</p>
+            </div>
+            <div id="wrapper-them">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Gloria <span id="streak-them" class="text-amber-500 hidden">🔥</span></p>
+                <p id="score-them" class="text-base font-black text-emerald-400">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-grow flex flex-col items-center justify-center p-2 bg-slate-950/40 relative overflow-hidden">
+        <canvas id="effects-canvas"></canvas>
+
+        <div id="taunt-overlay" class="absolute pointer-events-none z-30 flex items-center justify-center hidden w-full h-full">
+            <div id="taunt-box" class="taunt-pop text-7xl select-none filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]"></div>
+        </div>
+
+        <div id="timer-wrapper" class="w-full max-w-[250px] xs:max-w-[270px] bg-slate-900 h-1 rounded-full overflow-hidden mb-3 opacity-0 transition-opacity">
+            <div id="timer-bar" class="w-full h-full bg-indigo-500 transition-all linear duration-1000"></div>
+        </div>
+
+        <div id="voice-panel" class="hidden absolute top-2 z-20 w-full max-w-[300px] bg-slate-900/95 border border-slate-800 backdrop-blur rounded-full px-3 py-1 flex items-center justify-between shadow-lg">
+            <span class="text-[10px] font-bold text-indigo-300 flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-500" id="voice-dot"></span> Voice Feed
+            </span>
+            <button id="mic-btn" class="bg-indigo-600 active:bg-indigo-700 text-white text-[10px] font-bold py-0.5 px-3 rounded-full transition">
+                Tap to Enable Voice Mic
+            </button>
+        </div>
+
+        <div id="board" class="grid grid-cols-3 gap-2.5 w-full max-w-[250px] xs:max-w-[270px] opacity-25 pointer-events-none">
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="0"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="1"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="2"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="3"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="4"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="5"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="6"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="7"></button>
+            <button class="cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95" data-index="8"></button>
+        </div>
+
+        <button id="reset-btn" class="hidden absolute bottom-2 bg-white active:bg-slate-200 text-slate-950 font-black py-1.5 px-6 rounded-full text-xs transition tracking-wide shadow-lg z-20">
+            Next Match Round
+        </button>
+    </div>
+
+    <div class="h-[38%] max-h-[280px] flex flex-col theme-panel border-t border-slate-800/80 shrink-0 z-10">
+        <div class="px-3 py-1.5 border-b border-slate-800/40 bg-slate-950/20 flex justify-between items-center shrink-0">
+            <span class="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
+                <span id="chat-status-dot" class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Live Communications
+            </span>
+            <span id="typing-indicator" class="text-[10px] text-indigo-400 italic font-semibold hidden">Gloria is typing...</span>
+        </div>
+        
+        <div id="chat-messages" class="flex-grow overflow-y-auto p-3 space-y-2 text-xs flex flex-col custom-scroll bg-black/10">
+            <div class="text-slate-500 text-center italic my-auto">Access Setup above to link devices via WebRTC</div>
+        </div>
+
+        <div id="emoji-tray" class="px-3 py-1 bg-slate-950/60 border-t border-slate-800/40 flex gap-4 overflow-x-auto shrink-0 opacity-40 pointer-events-none">
+            <button class="emoji-rx text-sm active:scale-125 transition">😂</button>
+            <button class="emoji-rx text-sm active:scale-125 transition">🤫</button>
+            <button class="emoji-rx text-sm active:scale-125 transition">💀</button>
+            <button class="emoji-rx text-sm active:scale-125 transition">🔥</button>
+            <button class="emoji-rx text-sm active:scale-125 transition">🏆</button>
+            <button class="emoji-rx text-sm active:scale-125 transition">👀</button>
+        </div>
+
+        <form id="chat-form" class="p-2 bg-slate-950 flex gap-2 border-t border-slate-800 shrink-0 pb-safe">
+            <input id="chat-input" type="text" autocomplete="off" disabled placeholder="Type message..." class="flex-grow px-3 py-2 bg-slate-900 border border-slate-800 text-white placeholder-slate-500 rounded-xl text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-30">
+            <button type="submit" id="send-btn" disabled class="bg-indigo-600 active:bg-indigo-700 disabled:bg-slate-800 text-white px-4 rounded-xl font-bold transition text-xs">
+                Send
+            </button>
+        </form>
+    </div>
+
+    <audio id="remote-audio" autoplay playsinline class="hidden"></audio>
+
+    <script>
+        let peer = null, conn = null, myRole = null, isMyTurn = false;
+        let boardState = Array(9).fill("");
+        let typingTimeout = null, timerInterval = null;
+        let scores = { you: 0, them: 0, ties: 0, streakYou: 0, streakThem: 0 };
+        let timeLeft = 15;
+        let audioContextUnlocked = false;
+
+        const winningCombos = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+        const hostBtn = document.getElementById('host-btn'), joinBtn = document.getElementById('join-btn'), toggleSetupBtn = document.getElementById('toggle-setup-btn');
+        const myIdDisplay = document.getElementById('my-id-display'), myIdSpan = document.getElementById('my-id'), peerIdInput = document.getElementById('peer-id-input'), setupPanel = document.getElementById('setup-panel');
+        const statusText = document.getElementById('status-text'), board = document.getElementById('board'), cells = document.querySelectorAll('.cell'), resetBtn = document.getElementById('reset-btn');
+        const chatMessages = document.getElementById('chat-messages'), chatForm = document.getElementById('chat-form'), chatInput = document.getElementById('chat-input'), sendBtn = document.getElementById('send-btn'), chatStatusDot = document.getElementById('chat-status-dot');
+        const typingIndicator = document.getElementById('typing-indicator'), emojiTray = document.getElementById('emoji-tray'), themeSelector = document.getElementById('theme-selector');
+        const voicePanel = document.getElementById('voice-panel'), micBtn = document.getElementById('mic-btn'), voiceDot = document.getElementById('voice-dot');
+        const timerWrapper = document.getElementById('timer-wrapper'), timerBar = document.getElementById('timer-bar');
+        const tauntOverlay = document.getElementById('taunt-overlay'), tauntBox = document.getElementById('taunt-box');
+        const canvas = document.getElementById('effects-canvas'), ctx = canvas.getContext('2d');
+
+        let particles = [];
+        function resizeCanvas() { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }
+        window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+        themeSelector.addEventListener('change', (e) => {
+            document.documentElement.setAttribute('data-theme', e.target.value);
+            vibrateDevice([15]);
+        });
+
+        toggleSetupBtn.addEventListener('click', () => setupPanel.classList.toggle('hidden'));
+
+        function vibrateDevice(pattern) {
+            if ("vibrate" in navigator) navigator.vibrate(pattern);
+        }
+
+        function unlockAudioEngine() {
+            if (audioContextUnlocked) return;
+            try {
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                const context = new AudioContext();
+                const buffer = context.createBuffer(1, 1, 22050);
+                const source = context.createBufferSource();
+                source.buffer = buffer; source.connect(context.destination);
+                source.start(0); audioContextUnlocked = true;
+            } catch (e) {}
+        }
+
+        function startTurnTimer() {
+            clearInterval(timerInterval);
+            if (!conn) return;
+            timeLeft = 15;
+            timerWrapper.classList.remove('opacity-0');
+            updateTimerBarDisplay();
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerBarDisplay();
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    if (isMyTurn) {
+                        vibrateDevice([200, 100, 200]);
+                        playNotificationSound('tie');
+                        isMyTurn = false;
+                        updateStatusMsg();
+                        conn.send({ type: 'timeoutSkip' });
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateTimerBarDisplay() {
+            const percentage = (timeLeft / 15) * 100;
+            timerBar.style.width = `${percentage}%`;
+            if (timeLeft <= 4) {
+                timerBar.className = "w-full h-full bg-rose-500 animate-pulse";
+            } else {
+                timerBar.className = "w-full h-full bg-indigo-500";
+            }
+        }
+
+        function stopTurnTimer() {
+            clearInterval(timerInterval);
+            timerWrapper.classList.add('opacity-0');
+        }
+
+        function displayScreenTaunt(emoji) {
+            tauntBox.innerText = emoji;
+            tauntOverlay.classList.remove('hidden');
+            setTimeout(() => { tauntOverlay.classList.add('hidden'); }, 1800);
+        }
+
+        function launchConfetti() {
+            for (let i = 0; i < 60; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8 - 3,
+                    size: Math.random() * 4 + 3,
+                    color: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6'][Math.floor(Math.random() * 5)],
+                    alpha: 1
+                });
+            }
+            animateParticles();
+        }
+
+        function animateParticles() {
+            if (particles.length === 0) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, idx) => {
+                p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.alpha -= 0.015;
+                ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                if (p.alpha <= 0) particles.splice(idx, 1);
+            });
+            requestAnimationFrame(animateParticles);
+        }
+
+        function playNotificationSound(type) {
+            if(!audioContextUnlocked) unlockAudioEngine();
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                
+                if (type === 'move') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.06);
+                    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+                } else if (type === 'win') {
+                    osc.type = 'triangle'; osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+                    osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2);
+                    osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+                } else if (type === 'tie') {
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(220.00, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(196.00, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                } else {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.12);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+                }
+            } catch (e) {}
+        }
+
+        function initPeer() {
+            if (peer) return;
+            peer = new Peer();
+            peer.on('open', (id) => {
+                myIdSpan.innerText = id; myIdDisplay.classList.remove('hidden');
+                statusText.innerText = "Hosting...";
+            });
+            peer.on('connection', (connection) => {
+                conn = connection; myRole = 'H'; isMyTurn = true; setupDataChannels();
+            });
+            setupVoiceListener();
+        }
+
+        hostBtn.addEventListener('click', () => { unlockAudioEngine(); hostBtn.disabled = true; initPeer(); });
+        joinBtn.addEventListener('click', () => {
+            const targetId = peerIdInput.value.trim(); if (!targetId) return;
+            unlockAudioEngine(); joinBtn.disabled = true;
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect(targetId); myRole = 'J'; isMyTurn = false;
+                setupDataChannels(); setupVoiceListener();
+            });
+        });
+
+        function setupDataChannels() {
+            conn.on('open', () => {
+                setupPanel.classList.add('hidden');
+                board.classList.remove('opacity-25', 'pointer-events-none');
+                emojiTray.classList.remove('opacity-40', 'pointer-events-none');
+                chatInput.disabled = false; sendBtn.disabled = false;
+                chatStatusDot.classList.replace('bg-slate-600', 'bg-emerald-500');
+                voicePanel.classList.remove('hidden'); chatMessages.innerHTML = "";
+                vibrateDevice([100, 50, 100]);
+                updateStatusMsg();
+                startTurnTimer();
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'chat') {
+                    appendMessage('Them', data.msg, 'bg-slate-800 text-slate-100 self-start rounded-tl-none');
+                    playNotificationSound('chat');
+                    vibrateDevice([30]);
+                } else if (data.type === 'taunt') {
+                    displayScreenTaunt(data.emoji);
+                    playNotificationSound('chat');
+                } else if (data.type === 'typing') {
+                    if (data.isTyping) typingIndicator.classList.remove('hidden');
+                    else typingIndicator.classList.add('hidden');
+                } else if (data.type === 'move') {
+                    handleRemoteMove(data.index);
+                    playNotificationSound('move');
+                    vibrateDevice([40, 30, 40]);
+                } else if (data.type === 'timeoutSkip') {
+                    isMyTurn = true;
+                    playNotificationSound('move');
+                    updateStatusMsg();
+                    startTurnTimer();
+                } else if (data.type === 'reset') {
+                    resetGameBoard(false);
+                } else if (data.type === 'scoreUpdate') {
+                    scores = data.scores; syncScoreboardDisplay();
+                }
+            });
+        }
+
+        function setupVoiceListener() {
+            peer.on('call', (call) => {
+                unlockAudioEngine();
+                navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                    call.answer(stream);
+                    call.on('stream', (remoteStream) => {
+                        const audioTrack = document.getElementById('remote-audio');
+                        audioTrack.srcObject = remoteStream;
+                        audioTrack.play().catch(e => {});
+                        voiceDot.classList.replace('bg-slate-500', 'bg-emerald-500');
+                        micBtn.innerText = "Voice Connected"; micBtn.disabled = true;
+                    });
+                }).catch(err => console.error(err));
+            });
+        }
+
+        micBtn.addEventListener('click', () => {
+            unlockAudioEngine(); vibrateDevice([20]);
+            micBtn.innerText = "Connecting...";
+            
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                micBtn.innerText = "Error: Requires HTTPS";
+                alert("Security block: Microphone access is strictly disabled over unencrypted HTTP. Host this on a secure platform like GitHub Pages to talk live.");
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                const call = peer.call(conn.peer, stream);
+                call.on('stream', (remoteStream) => {
+                    const audioTrack = document.getElementById('remote-audio');
+                    audioTrack.srcObject = remoteStream; audioTrack.play().catch(e => {});
+                    voiceDot.classList.replace('bg-slate-500', 'bg-emerald-500');
+                    micBtn.innerText = "Voice Connected"; micBtn.disabled = true;
+                });
+            }).catch(err => { micBtn.innerText = "Mic Denied"; });
+        });
+
+        chatInput.addEventListener('input', () => {
+            conn.send({ type: 'typing', isTyping: true });
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => { conn.send({ type: 'typing', isTyping: false }); }, 1200);
+        });
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault(); const msg = chatInput.value.trim(); if (!msg) return;
+            conn.send({ type: 'typing', isTyping: false });
+            appendMessage('You', msg, 'bg-indigo-600 text-white self-end rounded-tr-none');
+            conn.send({ type: 'chat', msg: msg }); chatInput.value = "";
+        });
+
+        document.querySelectorAll('.emoji-rx').forEach(btn => {
+            btn.addEventListener('click', () => {
+                unlockAudioEngine(); vibrateDevice([15]);
+                conn.send({ type: 'taunt', emoji: btn.innerText });
+                displayScreenTaunt(btn.innerText);
+            });
+        });
+
+        function appendMessage(sender, text, classes) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `max-w-[85%] rounded-2xl px-3 py-1.5 shadow-sm transition-all duration-200 ${classes}`;
+            msgDiv.innerText = text; chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        cells.forEach(cell => {
+            cell.addEventListener('click', () => {
+                unlockAudioEngine();
+                const idx = cell.getAttribute('data-index');
+                if (!isMyTurn || boardState[idx] !== "") return;
+
+                vibrateDevice([25]);
+                const mySymbol = (myRole === 'H') ? 'X' : 'O';
+                boardState[idx] = mySymbol; cell.innerText = mySymbol;
+                cell.classList.add(mySymbol === 'X' ? 'text-indigo-400' : 'text-emerald-400');
+                conn.send({ type: 'move', index: idx });
+                
+                if (checkWin()) {
+                    statusText.innerText = "You Win! 🎉"; scores.you++;
+                    scores.streakYou++; scores.streakThem = 0;
+                    vibrateDevice([300, 100, 300]); launchConfetti(); playNotificationSound('win');
+                    syncScoreboardDisplay(); sendScoreUpdate(); endGame();
+                } else if (boardState.every(c => c !== "")) {
+                    statusText.innerText = "Tie Game! 🤝"; scores.ties++;
+                    scores.streakYou = 0; scores.streakThem = 0;
+                    vibrateDevice([150, 100, 150]); playNotificationSound('tie');
+                    syncScoreboardDisplay(); sendScoreUpdate(); endGame();
+                } else {
+                    isMyTurn = false; updateStatusMsg(); startTurnTimer();
+                }
+            });
+        });
+
+        function handleRemoteMove(idx) {
+            const counterSymbol = (myRole === 'H') ? 'O' : 'X';
+            boardState[idx] = counterSymbol; cells[idx].innerText = counterSymbol;
+            cells[idx].classList.add(counterSymbol === 'X' ? 'text-indigo-400' : 'text-emerald-400');
+
+            if (checkWin()) {
+                statusText.innerText = "Gloria Wins! ✨"; scores.them++;
+                scores.streakThem++; scores.streakYou = 0;
+                vibrateDevice([500]); playNotificationSound('tie');
+                syncScoreboardDisplay(); endGame();
+            } else if (boardState.every(c => c !== "")) {
+                statusText.innerText = "Tie Game! 🤝"; scores.ties++;
+                scores.streakYou = 0; scores.streakThem = 0;
+                playNotificationSound('tie'); syncScoreboardDisplay(); endGame();
+            } else {
+                isMyTurn = true; updateStatusMsg(); startTurnTimer();
+            }
+        }
+
+        function checkWin() {
+            return winningCombos.some(combo => combo.every(idx => boardState[idx] !== "" && boardState[idx] === boardState[combo[0]]));
+        }
+
+        function updateStatusMsg() {
+            statusText.innerText = isMyTurn ? "Your Move" : "Gloria's Turn";
+            statusText.className = isMyTurn ? "text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md" : "text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md";
+        }
+
+        function endGame() { isMyTurn = false; stopTurnTimer(); resetBtn.classList.remove('hidden'); }
+        resetBtn.addEventListener('click', () => { vibrateDevice([30]); resetGameBoard(true); });
+
+        function sendScoreUpdate() {
+            conn.send({ type: 'scoreUpdate', scores: { you: scores.them, them: scores.you, ties: scores.ties, streakYou: scores.streakThem, streakThem: scores.streakYou } });
+        }
+
+        function syncScoreboardDisplay() {
+            document.getElementById('score-you').innerText = scores.you;
+            document.getElementById('score-them').innerText = scores.them;
+            document.getElementById('score-ties').innerText = scores.ties;
+
+            // Manage dynamic fire burning hot-streaks styling rules
+            const streakYouDot = document.getElementById('streak-you');
+            const scoreYouText = document.getElementById('score-you');
+            if (scores.streakYou >= 3) {
+                streakYouDot.classList.remove('hidden'); scoreYouText.classList.add('on-fire');
+            } else {
+                streakYouDot.classList.add('hidden'); scoreYouText.classList.remove('on-fire');
+            }
+
+            const streakThemDot = document.getElementById('streak-them');
+            const scoreThemText = document.getElementById('score-them');
+            if (scores.streakThem >= 3) {
+                streakThemDot.classList.remove('hidden'); scoreThemText.classList.add('on-fire');
+            } else {
+                streakThemDot.classList.add('hidden'); scoreThemText.classList.remove('on-fire');
+            }
+        }
+
+        function resetGameBoard(notifyPeer) {
+            boardState = Array(9).fill("");
+            cells.forEach(cell => { cell.innerText = ""; cell.className = "cell bg-slate-900 border border-slate-800/60 text-4xl font-black rounded-xl flex items-center justify-center shadow-md active:scale-95"; });
+            resetBtn.classList.add('hidden');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            myRole = (myRole === 'H') ? 'J' : 'H'; isMyTurn = (myRole === 'H');
+            if (notifyPeer) conn.send({ type: 'reset' });
+            updateStatusMsg();
+            startTurnTimer();
+        }
+    </script>
+</body>
+</html>
