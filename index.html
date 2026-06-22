@@ -466,7 +466,7 @@
                 if (!isMyTurn || boardState[idx] !== "") return;
 
                 vibrateDevice([25]);
-                const mySymbol = (myRole === 'H') ? 'X' : 'O';
+                const mySymbol = (myRole === 'H') ? 'P' : 'G';
                 boardState[idx] = mySymbol; cell.innerText = mySymbol;
                 cell.classList.add(mySymbol === 'X' ? 'text-indigo-400' : 'text-emerald-400');
                 conn.send({ type: 'move', index: idx });
@@ -488,12 +488,12 @@
         });
 
         function handleRemoteMove(idx) {
-            const counterSymbol = (myRole === 'H') ? 'O' : 'X';
+            const counterSymbol = (myRole === 'H') ? 'G' : 'P';
             boardState[idx] = counterSymbol; cells[idx].innerText = counterSymbol;
-            cells[idx].classList.add(counterSymbol === 'X' ? 'text-indigo-400' : 'text-emerald-400');
+            cells[idx].classList.add(counterSymbol === 'P' ? 'text-indigo-400' : 'text-emerald-400');
 
             if (checkWin()) {
-                statusText.innerText = "Gloria Wins! ✨"; scores.them++;
+                statusText.innerText = "Opponent Wins! ✨"; scores.them++;
                 scores.streakThem++; scores.streakYou = 0;
                 vibrateDevice([500]); playNotificationSound('tie');
                 syncScoreboardDisplay(); endGame();
