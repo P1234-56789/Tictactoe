@@ -65,7 +65,7 @@
         <div class="grid grid-cols-3 gap-2 text-center bg-slate-950/60 p-2 rounded-xl w-full max-w-md border border-slate-800/40 mt-1">
             <div id="wrapper-you">
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">You <span id="streak-you" class="text-amber-500 hidden">🔥</span></p>
-                <p id="score-you" class="text-base font-black text-indigo-400">0</p>
+                <p id="score-you" class="text-base font-black text-gold-400">0</p>
             </div>
             <div>
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ties</p>
@@ -73,7 +73,7 @@
             </div>
             <div id="wrapper-them">
                 <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Opponent <span id="streak-them" class="text-amber-500 hidden">🔥</span></p>
-                <p id="score-them" class="text-base font-black text-emerald-400">0</p>
+                <p id="score-them" class="text-base font-black text-white-400">0</p>
             </div>
         </div>
     </div>
@@ -511,7 +511,7 @@
         }
 
         function updateStatusMsg() {
-            statusText.innerText = isMyTurn ? "Your Move" : "Gloria's Turn";
+            statusText.innerText = isMyTurn ? "Your Move" : "Opponent's Turn";
             statusText.className = isMyTurn ? "text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md" : "text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md";
         }
 
