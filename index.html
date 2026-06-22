@@ -468,7 +468,7 @@
                 vibrateDevice([25]);
                 const mySymbol = (myRole === 'H') ? 'P' : 'G';
                 boardState[idx] = mySymbol; cell.innerText = mySymbol;
-                cell.classList.add(mySymbol === 'X' ? 'text-indigo-400' : 'text-emerald-400');
+                cell.classList.add(mySymbol === 'P' ? 'text-indigo-400' : 'text-emerald-400');
                 conn.send({ type: 'move', index: idx });
                 
                 if (checkWin()) {
