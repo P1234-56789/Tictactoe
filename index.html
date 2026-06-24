@@ -44,9 +44,7 @@
                     <option value="amethyst">🔮 Amethyst</option>
                 </select>
                 <button id="toggle-setup-btn" class="text-xs text-indigo-400 font-bold hover:underline">Setup</button>
-                <button id="share-game-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold">
-    Share Game Code
-</button>
+                
             </div>
         </div>
 
@@ -731,32 +729,7 @@ function startWatchdog() {
 //    ... process game logic ...
 // });
 
-        document.getElementById('share-game-btn').addEventListener('click', async () => {
-    // Get the ID currently displayed on your screen
-    const peerId = document.getElementById('my-id').innerText;
-    
-    const shareData = {
-        title: 'P💕G Elite: Blitz Arena',
-        text: `Join my Blitz Arena game! Use this code to connect: ${peerId}`,
-        url: window.location.href // Shares the current page link
-    };
 
-    if (navigator.share) {
-        try {
-            // This triggers the native Android Share Menu
-            await navigator.share(shareData);
-            console.log('Shared successfully');
-        } catch (err) {
-            // This happens if the user cancels the share menu
-            console.log('Share cancelled or failed', err);
-        }
-    } else {
-        // FALLBACK: If for some reason the browser doesn't support the native menu
-        // We copy it to the clipboard as a backup
-        navigator.clipboard.writeText(shareData.text);
-        alert("Link/Code copied! Paste it into WhatsApp.");
-    }
-});
     </script>
 </body>
 </html>
