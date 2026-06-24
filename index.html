@@ -555,6 +555,104 @@
             updateStatusMsg();
             startTurnTimer();
         }
+        // --- ADD THIS TO YOUR SCRIPT ---
+
+        // 1. Listen for when the user returns to the tab
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                console.log("App returned to foreground, checking status...");
+                // If we were hosting and the peer was destroyed, re-init
+                if (peer && peer.disconnected) {
+                    peer.reconnect();
+                }
+            }
+        });
+
+        // 2. Updated initPeer with better persistence
+        function initPeer() {
+            if (peer && !peer.destroyed) return;
+
+            peer = new Peer({
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                },
+                debug: 1 // Helps identify if it's dropping in the console
+            });
+
+            peer.on('open', (id) => {
+                myIdSpan.innerText = id; 
+                myIdDisplay.classList.remove('hidden');
+                statusText.innerText = "Hosting... (Keep app open)";
+            });
+
+            peer.on('disconnected', () => {
+                statusText.innerText = "Disconnected - Reconnecting...";
+                peer.reconnect();
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection; 
+                myRole = 'H'; 
+                isMyTurn = true; 
+                setupDataChannels();
+            });
+
+            peer.on('error', (err) => {
+                console.error("PeerJS Error:", err);
+                if (err.type === 'unavailable-id' || err.type === 'peer-unavailable') {
+                    statusText.innerText = "Connection lost. Please reset.";
+                }
+            });
+            
+            setupVoiceListener();
+        }
+        // --- UPDATED EVENT LISTENERS ---
+
+        hostBtn.addEventListener('click', () => { 
+            unlockAudioEngine(); 
+            hostBtn.disabled = true; 
+            
+            // Hide the Join UI elements
+            document.getElementById('peer-id-input').parentElement.classList.add('hidden');
+            
+            initPeer(); 
+        });
+        
+        joinBtn.addEventListener('click', () => {
+            const targetId = peerIdInput.value.trim(); 
+            if (!targetId) return;
+            
+            unlockAudioEngine(); 
+            joinBtn.disabled = true;
+            
+            // Hide the Host button once connecting as a guest
+            hostBtn.classList.add('hidden');
+            
+            peer = new Peer({
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            peer.on('open', () => {
+                conn = peer.connect(targetId); 
+                myRole = 'J'; 
+                isMyTurn = false; 
+                setupDataChannels();
+                setupVoiceListener();
+            });
+            
+            peer.on('error', (err) => {
+                joinBtn.disabled = false;
+                alert("Join Identity Matrix Error: " + err.type);
+            });
+        });
     </script>
 </body>
 </html>
